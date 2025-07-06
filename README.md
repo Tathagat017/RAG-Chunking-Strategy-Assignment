@@ -2,6 +2,13 @@
 
 A full-stack web application for visualizing different text chunking strategies used in RAG (Retrieval-Augmented Generation) systems. Upload PDF documents and compare how different chunking strategies split the text.
 
+![image](https://github.com/user-attachments/assets/d5846472-143a-48af-9c86-d7a425d7ea21)
+
+![image](https://github.com/user-attachments/assets/d2eabbcc-1dbf-41a4-89e1-933ed02957d0)
+![image](https://github.com/user-attachments/assets/212a6d99-4142-4773-bc43-93a1e4212476)
+
+
+
 ## Features
 
 - **PDF Upload & Text Extraction**: Upload PDF files and extract text content
