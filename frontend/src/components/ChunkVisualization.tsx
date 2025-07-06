@@ -1,275 +1,236 @@
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
-  Box,
+  Paper,
   Text,
+  Tabs,
   ScrollArea,
-  Stack,
-  Card,
   Badge,
   Group,
-  Divider,
-  Button,
-  Alert,
-  Tabs,
-  Code,
-  Paper,
-  ActionIcon,
-  Tooltip,
+  Stack,
+  Card,
+  Table,
+  JsonInput,
 } from "@mantine/core";
-import { IconInfoCircle, IconCopy, IconCheck } from "@tabler/icons-react";
-import { useClipboard } from "@mantine/hooks";
-import { ChunkInfo, ChunkingStrategy } from "../types";
+import { IconEye, IconList, IconCode } from "@tabler/icons-react";
+import type { ChunkingResponse } from "../types";
 
 interface ChunkVisualizationProps {
-  chunks: ChunkInfo[];
-  originalText: string;
-  strategyExplanation: string;
-  selectedStrategy: ChunkingStrategy;
+  result: ChunkingResponse;
 }
 
-export default function ChunkVisualization({
-  chunks,
-  originalText,
-  strategyExplanation,
-  selectedStrategy,
-}: ChunkVisualizationProps) {
+export const ChunkVisualization: React.FC<ChunkVisualizationProps> = ({
+  result,
+}) => {
+  const [activeTab, setActiveTab] = useState<string>("visual");
   const [selectedChunk, setSelectedChunk] = useState<number | null>(null);
-  const clipboard = useClipboard({ timeout: 2000 });
 
-  const getChunkColor = (index: number) => {
-    const colors = [
-      "blue",
-      "green",
-      "orange",
-      "purple",
-      "red",
-      "teal",
-      "pink",
-      "indigo",
-    ];
-    return colors[index % colors.length];
-  };
+  const colors = [
+    "#ffebee",
+    "#e8f5e8",
+    "#e3f2fd",
+    "#fff3e0",
+    "#f3e5f5",
+    "#fce4ec",
+    "#e0f2f1",
+    "#e1f5fe",
+    "#fff8e1",
+    "#f9fbe7",
+  ];
 
-  const highlightText = (text: string, chunks: ChunkInfo[]) => {
-    if (!chunks.length) return text;
+  const highlightedText = useMemo(() => {
+    if (!result.chunks.length) return "";
 
-    const parts = [];
+    let highlighted = "";
     let lastIndex = 0;
 
-    chunks.forEach((chunk, index) => {
-      // Add text before chunk
+    result.chunks.forEach((chunk, index) => {
+      const color = colors[index % colors.length];
+      const isSelected = selectedChunk === index;
+
+      // Add any text before this chunk
       if (chunk.start_index > lastIndex) {
-        parts.push(
-          <span key={`before-${index}`}>
-            {text.substring(lastIndex, chunk.start_index)}
-          </span>
+        highlighted += result.chunks[0].content.slice(
+          lastIndex,
+          chunk.start_index
         );
       }
 
-      // Add highlighted chunk
-      parts.push(
-        <span
-          key={`chunk-${index}`}
-          style={{
-            backgroundColor: `var(--mantine-color-${getChunkColor(index)}-1)`,
-            border:
-              selectedChunk === index
-                ? `2px solid var(--mantine-color-${getChunkColor(index)}-6)`
-                : "none",
-            padding: "2px 4px",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-          onClick={() =>
-            setSelectedChunk(selectedChunk === index ? null : index)
-          }
-        >
-          {text.substring(chunk.start_index, chunk.end_index)}
-        </span>
-      );
+      // Add the chunk with highlighting
+      highlighted += `<span 
+        style="background-color: ${color}; 
+               padding: 2px 4px; 
+               border-radius: 4px; 
+               cursor: pointer;
+               border: ${
+                 isSelected ? "2px solid #228be6" : "1px solid transparent"
+               };
+               display: inline-block;
+               margin: 1px;"
+        data-chunk-id="${index}"
+        title="Chunk ${index + 1} (${chunk.size} chars)"
+      >${chunk.content}</span>`;
 
       lastIndex = chunk.end_index;
     });
 
-    // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push(<span key="after">{text.substring(lastIndex)}</span>);
-    }
+    return highlighted;
+  }, [result.chunks, selectedChunk]);
 
-    return parts;
+  const handleChunkClick = (event: React.MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const chunkId = target.getAttribute("data-chunk-id");
+    if (chunkId !== null) {
+      const id = parseInt(chunkId);
+      setSelectedChunk(selectedChunk === id ? null : id);
+    }
   };
 
-  if (!chunks.length && !originalText) {
-    return (
-      <Box ta="center" py="xl">
-        <Text c="dimmed" size="lg">
-          Upload a PDF and generate chunks to see the visualization
-        </Text>
-      </Box>
-    );
-  }
-
   return (
-    <Box>
-      <Text size="lg" fw={600} mb="md">
-        Chunk Visualization
-      </Text>
-
-      {strategyExplanation && (
-        <Alert icon={<IconInfoCircle size={16} />} mb="md" variant="light">
-          <Text size="sm">{strategyExplanation}</Text>
-        </Alert>
-      )}
-
-      {chunks.length > 0 && (
-        <Group mb="md">
-          <Badge variant="light" size="lg">
-            {chunks.length} chunks generated
-          </Badge>
-          <Badge variant="light" size="lg">
-            Strategy: {selectedStrategy}
-          </Badge>
+    <Paper p="md" withBorder>
+      <Stack>
+        <Group justify="space-between">
+          <Text size="lg" fw={500}>
+            Chunking Results
+          </Text>
+          <Group>
+            <Badge variant="light">{result.total_chunks} chunks</Badge>
+            <Badge variant="light">{result.strategy}</Badge>
+          </Group>
         </Group>
-      )}
 
-      <Tabs defaultValue="visual" mb="md">
-        <Tabs.List>
-          <Tabs.Tab value="visual">Visual Highlighting</Tabs.Tab>
-          <Tabs.Tab value="chunks">Chunk Details</Tabs.Tab>
-          <Tabs.Tab value="metadata">Metadata</Tabs.Tab>
-        </Tabs.List>
+        <Text size="sm" c="dimmed">
+          {result.strategy_explanation}
+        </Text>
 
-        <Tabs.Panel value="visual" pt="md">
-          {originalText && (
-            <Paper p="md" style={{ maxHeight: "600px", overflow: "auto" }}>
-              <Text
-                size="sm"
-                style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}
-              >
-                {highlightText(originalText, chunks)}
+        <Tabs
+          value={activeTab}
+          onChange={(value) => setActiveTab(value || "visual")}
+        >
+          <Tabs.List>
+            <Tabs.Tab value="visual" leftSection={<IconEye size={16} />}>
+              Visual
+            </Tabs.Tab>
+            <Tabs.Tab value="details" leftSection={<IconList size={16} />}>
+              Details
+            </Tabs.Tab>
+            <Tabs.Tab value="metadata" leftSection={<IconCode size={16} />}>
+              Metadata
+            </Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="visual" pt="md">
+            <Stack>
+              <Text size="sm" c="dimmed">
+                Click on chunks to highlight them. Each chunk is color-coded for
+                easy identification.
               </Text>
-            </Paper>
-          )}
-        </Tabs.Panel>
-
-        <Tabs.Panel value="chunks" pt="md">
-          <ScrollArea style={{ height: "600px" }}>
-            <Stack gap="md">
-              {chunks.map((chunk, index) => (
-                <Card
-                  key={chunk.id}
-                  shadow="sm"
-                  p="md"
-                  radius="md"
-                  withBorder
-                  style={{
-                    borderLeft: `4px solid var(--mantine-color-${getChunkColor(
-                      index
-                    )}-6)`,
-                    backgroundColor:
-                      selectedChunk === index
-                        ? `var(--mantine-color-${getChunkColor(index)}-0)`
-                        : undefined,
-                  }}
-                >
-                  <Group justify="space-between" mb="sm">
-                    <Group>
-                      <Badge color={getChunkColor(index)} variant="light">
-                        Chunk {index + 1}
-                      </Badge>
-                      <Text size="sm" c="dimmed">
-                        {chunk.size} characters
-                      </Text>
-                      {chunk.overlap_with_previous > 0 && (
-                        <Badge color="orange" variant="light" size="sm">
-                          {chunk.overlap_with_previous} overlap
-                        </Badge>
-                      )}
-                    </Group>
-                    <Group>
-                      <Tooltip
-                        label={clipboard.copied ? "Copied!" : "Copy chunk"}
-                      >
-                        <ActionIcon
-                          variant="subtle"
-                          onClick={() => clipboard.copy(chunk.content)}
-                        >
-                          {clipboard.copied ? (
-                            <IconCheck size={16} />
-                          ) : (
-                            <IconCopy size={16} />
-                          )}
-                        </ActionIcon>
-                      </Tooltip>
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() =>
-                          setSelectedChunk(
-                            selectedChunk === index ? null : index
-                          )
-                        }
-                      >
-                        {selectedChunk === index ? "Deselect" : "Highlight"}
-                      </Button>
-                    </Group>
-                  </Group>
-
-                  <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-                    {chunk.content.length > 300
-                      ? `${chunk.content.substring(0, 300)}...`
-                      : chunk.content}
-                  </Text>
-
-                  <Divider my="sm" />
-
-                  <Group gap="xs">
-                    <Text size="xs" c="dimmed">
-                      Position: {chunk.start_index} - {chunk.end_index}
+              <ScrollArea h={400}>
+                <div
+                  dangerouslySetInnerHTML={{ __html: highlightedText }}
+                  onClick={handleChunkClick}
+                  style={{ lineHeight: 1.6, fontSize: "14px" }}
+                />
+              </ScrollArea>
+              {selectedChunk !== null && (
+                <Card withBorder>
+                  <Stack gap="xs">
+                    <Text size="sm" fw={500}>
+                      Chunk {selectedChunk + 1} Details
                     </Text>
-                    {Object.keys(chunk.metadata).length > 0 && (
-                      <Text size="xs" c="dimmed">
-                        • Method: {chunk.metadata.method || "unknown"}
+                    <Group>
+                      <Text size="xs">
+                        Size: {result.chunks[selectedChunk].size} chars
                       </Text>
-                    )}
-                  </Group>
+                      <Text size="xs">
+                        Start: {result.chunks[selectedChunk].start_index}
+                      </Text>
+                      <Text size="xs">
+                        End: {result.chunks[selectedChunk].end_index}
+                      </Text>
+                      <Text size="xs">
+                        Overlap:{" "}
+                        {result.chunks[selectedChunk].overlap_with_previous}
+                      </Text>
+                    </Group>
+                  </Stack>
                 </Card>
-              ))}
+              )}
             </Stack>
-          </ScrollArea>
-        </Tabs.Panel>
+          </Tabs.Panel>
 
-        <Tabs.Panel value="metadata" pt="md">
-          <ScrollArea style={{ height: "600px" }}>
-            <Stack gap="md">
-              {chunks.map((chunk, index) => (
-                <Card key={chunk.id} shadow="sm" p="md" radius="md" withBorder>
-                  <Group justify="space-between" mb="sm">
-                    <Badge color={getChunkColor(index)} variant="light">
-                      Chunk {index + 1} Metadata
-                    </Badge>
-                  </Group>
+          <Tabs.Panel value="details" pt="md">
+            <ScrollArea h={400}>
+              <Table>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Chunk</Table.Th>
+                    <Table.Th>Size</Table.Th>
+                    <Table.Th>Start</Table.Th>
+                    <Table.Th>End</Table.Th>
+                    <Table.Th>Overlap</Table.Th>
+                    <Table.Th>Preview</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {result.chunks.map((chunk, index) => (
+                    <Table.Tr key={chunk.id}>
+                      <Table.Td>
+                        <Badge
+                          variant="light"
+                          style={{
+                            backgroundColor: colors[index % colors.length],
+                          }}
+                        >
+                          {index + 1}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>{chunk.size}</Table.Td>
+                      <Table.Td>{chunk.start_index}</Table.Td>
+                      <Table.Td>{chunk.end_index}</Table.Td>
+                      <Table.Td>{chunk.overlap_with_previous}</Table.Td>
+                      <Table.Td>
+                        <Text size="xs" lineClamp={2} style={{ maxWidth: 200 }}>
+                          {chunk.content}
+                        </Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          </Tabs.Panel>
 
-                  <Code block>
-                    {JSON.stringify(
-                      {
-                        id: chunk.id,
-                        size: chunk.size,
-                        start_index: chunk.start_index,
-                        end_index: chunk.end_index,
-                        overlap_with_previous: chunk.overlap_with_previous,
-                        metadata: chunk.metadata,
-                      },
-                      null,
-                      2
-                    )}
-                  </Code>
-                </Card>
-              ))}
-            </Stack>
-          </ScrollArea>
-        </Tabs.Panel>
-      </Tabs>
-    </Box>
+          <Tabs.Panel value="metadata" pt="md">
+            <ScrollArea h={400}>
+              <Stack>
+                {result.chunks.map((chunk, index) => (
+                  <Card key={chunk.id} withBorder>
+                    <Stack gap="xs">
+                      <Group>
+                        <Badge
+                          variant="light"
+                          style={{
+                            backgroundColor: colors[index % colors.length],
+                          }}
+                        >
+                          Chunk {index + 1}
+                        </Badge>
+                      </Group>
+                      <JsonInput
+                        value={JSON.stringify(chunk.metadata, null, 2)}
+                        readOnly
+                        autosize
+                        minRows={2}
+                        maxRows={10}
+                      />
+                    </Stack>
+                  </Card>
+                ))}
+              </Stack>
+            </ScrollArea>
+          </Tabs.Panel>
+        </Tabs>
+      </Stack>
+    </Paper>
   );
-}
+};

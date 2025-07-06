@@ -1,218 +1,195 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  Box,
+  Paper,
   Text,
   Select,
-  NumberInput,
+  Slider,
   Button,
   Stack,
-  Textarea,
-  Badge,
-  Alert,
   Group,
-  Collapse,
+  Accordion,
+  List,
+  Badge,
+  LoadingOverlay,
 } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
-import {
-  IconInfoCircle,
-  IconChevronDown,
-  IconChevronUp,
-} from "@tabler/icons-react";
-import { chunkText, getChunkingStrategies } from "../api";
-import { ChunkingStrategy, StrategyInfo } from "../types";
+import { IconBrain, IconSettings, IconInfoCircle } from "@tabler/icons-react";
+import { getChunkingStrategies, chunkText } from "../api";
+import type {
+  ChunkingStrategy,
+  StrategyInfo,
+  ChunkingResponse,
+} from "../types";
 
 interface ChunkingControlsProps {
   text: string;
-  selectedStrategy: ChunkingStrategy;
-  setSelectedStrategy: (strategy: ChunkingStrategy) => void;
-  chunkSize: number;
-  setChunkSize: (size: number) => void;
-  chunkOverlap: number;
-  setChunkOverlap: (overlap: number) => void;
-  onChunksGenerated: (data: any) => void;
-  onError: (error: string) => void;
-  loading: boolean;
-  setLoading: (loading: boolean) => void;
+  onChunkingResult: (result: ChunkingResponse) => void;
 }
 
-export default function ChunkingControls({
+export const ChunkingControls: React.FC<ChunkingControlsProps> = ({
   text,
-  selectedStrategy,
-  setSelectedStrategy,
-  chunkSize,
-  setChunkSize,
-  chunkOverlap,
-  setChunkOverlap,
-  onChunksGenerated,
-  onError,
-  loading,
-  setLoading,
-}: ChunkingControlsProps) {
+  onChunkingResult,
+}) => {
+  const [strategy, setStrategy] = useState<ChunkingStrategy>("fixed");
+  const [chunkSize, setChunkSize] = useState(500);
+  const [chunkOverlap, setChunkOverlap] = useState(50);
   const [strategies, setStrategies] = useState<Record<string, StrategyInfo>>(
     {}
   );
-  const [opened, { toggle }] = useDisclosure(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingStrategies, setLoadingStrategies] = useState(true);
 
   useEffect(() => {
-    const loadStrategies = async () => {
+    const fetchStrategies = async () => {
       try {
         const strategiesData = await getChunkingStrategies();
         setStrategies(strategiesData);
       } catch (error) {
-        onError("Failed to load chunking strategies");
+        console.error("Failed to fetch strategies:", error);
+      } finally {
+        setLoadingStrategies(false);
       }
     };
-    loadStrategies();
-  }, [onError]);
+
+    fetchStrategies();
+  }, []);
 
   const handleChunk = async () => {
-    setLoading(true);
+    if (!text.trim()) return;
 
+    setLoading(true);
     try {
       const result = await chunkText({
         text,
-        strategy: selectedStrategy,
+        strategy,
         chunk_size: chunkSize,
         chunk_overlap: chunkOverlap,
       });
-
-      onChunksGenerated(result);
-    } catch (error: any) {
-      onError(error.response?.data?.detail || "Failed to chunk text");
+      onChunkingResult(result);
+    } catch (error) {
+      console.error("Failed to chunk text:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const strategyOptions = Object.entries(strategies).map(([key, strategy]) => ({
+  const strategyOptions = Object.entries(strategies).map(([key, info]) => ({
     value: key,
-    label: strategy.name,
+    label: info.name,
   }));
 
-  const currentStrategy = strategies[selectedStrategy];
+  const currentStrategy = strategies[strategy];
 
   return (
-    <Box>
-      <Text size="lg" fw={600} mb="md">
-        Chunking Configuration
-      </Text>
+    <Paper p="md" withBorder pos="relative">
+      <LoadingOverlay visible={loadingStrategies} />
 
-      <Stack gap="md">
+      <Stack>
+        <Group>
+          <IconSettings size={20} />
+          <Text size="lg" fw={500}>
+            Chunking Configuration
+          </Text>
+        </Group>
+
         <Select
           label="Chunking Strategy"
-          description="Select the chunking strategy to apply"
+          value={strategy}
+          onChange={(value) => setStrategy(value as ChunkingStrategy)}
           data={strategyOptions}
-          value={selectedStrategy}
-          onChange={(value) => setSelectedStrategy(value as ChunkingStrategy)}
-          disabled={loading}
+          disabled={!text.trim()}
         />
 
         <Group grow>
-          <NumberInput
-            label="Chunk Size"
-            description="Target size for each chunk (characters)"
-            value={chunkSize}
-            onChange={(value) => setChunkSize(Number(value))}
-            min={100}
-            max={5000}
-            step={100}
-            disabled={loading}
-          />
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              Chunk Size: {chunkSize}
+            </Text>
+            <Slider
+              value={chunkSize}
+              onChange={setChunkSize}
+              min={100}
+              max={2000}
+              step={50}
+              disabled={!text.trim()}
+            />
+          </Stack>
 
-          <NumberInput
-            label="Chunk Overlap"
-            description="Overlap between chunks (characters)"
-            value={chunkOverlap}
-            onChange={(value) => setChunkOverlap(Number(value))}
-            min={0}
-            max={1000}
-            step={50}
-            disabled={loading}
-          />
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              Chunk Overlap: {chunkOverlap}
+            </Text>
+            <Slider
+              value={chunkOverlap}
+              onChange={setChunkOverlap}
+              min={0}
+              max={Math.min(200, Math.floor(chunkSize * 0.5))}
+              step={10}
+              disabled={!text.trim()}
+            />
+          </Stack>
         </Group>
-
-        {currentStrategy && (
-          <Alert icon={<IconInfoCircle size={16} />} variant="light">
-            <Group justify="space-between" align="center">
-              <Text size="sm" fw={500}>
-                {currentStrategy.name}
-              </Text>
-              <Button
-                variant="subtle"
-                size="xs"
-                onClick={toggle}
-                rightSection={
-                  opened ? (
-                    <IconChevronUp size={14} />
-                  ) : (
-                    <IconChevronDown size={14} />
-                  )
-                }
-              >
-                {opened ? "Hide" : "Show"} Details
-              </Button>
-            </Group>
-
-            <Collapse in={opened} mt="sm">
-              <Text size="sm" mb="sm">
-                {currentStrategy.description}
-              </Text>
-
-              <Text size="xs" fw={500} c="green" mb="xs">
-                Advantages:
-              </Text>
-              <Stack gap="xs" mb="sm">
-                {currentStrategy.advantages.map((advantage, index) => (
-                  <Badge key={index} variant="light" color="green" size="sm">
-                    {advantage}
-                  </Badge>
-                ))}
-              </Stack>
-
-              <Text size="xs" fw={500} c="orange" mb="xs">
-                Disadvantages:
-              </Text>
-              <Stack gap="xs" mb="sm">
-                {currentStrategy.disadvantages.map((disadvantage, index) => (
-                  <Badge key={index} variant="light" color="orange" size="sm">
-                    {disadvantage}
-                  </Badge>
-                ))}
-              </Stack>
-
-              <Text size="xs" fw={500} c="blue" mb="xs">
-                Use Cases:
-              </Text>
-              <Stack gap="xs">
-                {currentStrategy.use_cases.map((useCase, index) => (
-                  <Badge key={index} variant="light" color="blue" size="sm">
-                    {useCase}
-                  </Badge>
-                ))}
-              </Stack>
-            </Collapse>
-          </Alert>
-        )}
-
-        <Textarea
-          label="Text Preview"
-          description={`Document contains ${text.length} characters`}
-          value={text.substring(0, 500) + (text.length > 500 ? "..." : "")}
-          readOnly
-          autosize
-          minRows={3}
-          maxRows={6}
-        />
 
         <Button
           onClick={handleChunk}
-          disabled={!text || loading}
+          disabled={!text.trim() || loading}
           loading={loading}
-          fullWidth
+          leftSection={<IconBrain size={16} />}
         >
-          {loading ? "Generating Chunks..." : "Generate Chunks"}
+          Apply Chunking Strategy
         </Button>
+
+        {currentStrategy && (
+          <Accordion variant="contained">
+            <Accordion.Item value="strategy-info">
+              <Accordion.Control icon={<IconInfoCircle size={16} />}>
+                About {currentStrategy.name}
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="md">
+                  <Text size="sm">{currentStrategy.description}</Text>
+
+                  <div>
+                    <Text size="sm" fw={500} mb="xs">
+                      Advantages:
+                    </Text>
+                    <List size="sm">
+                      {currentStrategy.advantages.map((advantage, index) => (
+                        <List.Item key={index}>{advantage}</List.Item>
+                      ))}
+                    </List>
+                  </div>
+
+                  <div>
+                    <Text size="sm" fw={500} mb="xs">
+                      Disadvantages:
+                    </Text>
+                    <List size="sm">
+                      {currentStrategy.disadvantages.map(
+                        (disadvantage, index) => (
+                          <List.Item key={index}>{disadvantage}</List.Item>
+                        )
+                      )}
+                    </List>
+                  </div>
+
+                  <div>
+                    <Text size="sm" fw={500} mb="xs">
+                      Best Use Cases:
+                    </Text>
+                    <Group gap="xs">
+                      {currentStrategy.use_cases.map((useCase, index) => (
+                        <Badge key={index} variant="light" size="sm">
+                          {useCase}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </div>
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        )}
       </Stack>
-    </Box>
+    </Paper>
   );
-}
+};

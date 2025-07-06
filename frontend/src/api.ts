@@ -1,16 +1,16 @@
 import axios from "axios";
-import { ChunkingRequest, ChunkingResponse, StrategyInfo } from "./types";
+import type { ChunkingRequest, ChunkingResponse, StrategyInfo } from "./types";
 
 const API_BASE_URL = "http://localhost:8000";
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-export const uploadPDF = async (file: File) => {
+export const uploadPDF = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append("file", file);
 
@@ -20,7 +20,7 @@ export const uploadPDF = async (file: File) => {
     },
   });
 
-  return response.data;
+  return response.data.text;
 };
 
 export const chunkText = async (
